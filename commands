@@ -72,4 +72,41 @@ az aks create \
 
 az extension add --name alb --upgrade
 
+https://learn.microsoft.com/en-us/azure/application-gateway/for-containers/quickstart-deploy-application-gateway-for-containers-alb-controller-helm?tabs=azure-cli%2Cinstall-helm-linux
+
+#AFter that we need to install the ALB controller with managed identity first:
+
+RESOURCE_GROUP='azure-rg'
+AKS_NAME='aks-66266215'
+IDENTITY_RESOURCE_NAME='azure-alb-identity'
+FEDERATED_IDENTITY_NAME='azure-alb-identity'
+CONTROLLER_NAMESPACE='azure-alb-system' # the namespace the controller will be provisioned to
+
+mcResourceGroup=$(az aks show --resource-group $RESOURCE_GROUP --name $AKS_NAME --query "nodeResourceGroup" -o tsv)
+mcResourceGroupId=$(az group show --name $mcResourceGroup --query id -otsv)
+
+echo "Creating identity $IDENTITY_RESOURCE_NAME in resource group $RESOURCE_GROUP"
+az identity create --resource-group $RESOURCE_GROUP --name $IDENTITY_RESOURCE_NAME
+principalId="$(az identity show -g $RESOURCE_GROUP -n $IDENTITY_RESOURCE_NAME --query principalId -otsv)"
+
+echo "Waiting 60 seconds to allow for replication of the identity..."
+sleep 60
+
+echo "Apply Reader role to the AKS managed cluster resource group for the newly provisioned identity"
+az role assignment create --assignee-object-id $principalId --assignee-principal-type ServicePrincipal --scope $mcResourceGroupId --role "acdd72a7-3385-48ef-bd42-f606fba81ae7" # Reader role
+
+echo "Set up federation with AKS OIDC issuer"
+AKS_OIDC_ISSUER="$(az aks show -n "$AKS_NAME" -g "$RESOURCE_GROUP" --query "oidcIssuerProfile.issuerUrl" -o tsv)"
+az identity federated-credential create --name $FEDERATED_IDENTITY_NAME --identity-name "$IDENTITY_RESOURCE_NAME" --resource-group $RESOURCE_GROUP --issuer "$AKS_OIDC_ISSUER" --subject "system:serviceaccount:$CONTROLLER_NAMESPACE:alb-controller-sa"
+
+
+Installing ALB controller:
+
+# HELM_NAMESPACE=''  (default namespace will be used when not specified)
+CONTROLLER_NAMESPACE='azure-alb-system' # ensure this matches the namespace provided in your managed identity
+az aks get-credentials --resource-group $RESOURCE_GROUP --name $AKS_NAME
+helm install alb-controller oci://mcr.microsoft.com/application-lb/charts/alb-controller --version 1.12.2 --set albController.namespace=$CONTROLLER_NAMESPACE --set albController.podIdentity.clientID=$(az identity show -g $RESOURCE_GROUP -n $IDENTITY_RESOURCE_NAME --query clientId -o tsv)
+
+
+
 
