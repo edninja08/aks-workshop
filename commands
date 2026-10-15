@@ -16,7 +16,7 @@ export LOCATION="centralus"
 echo "Resource Group: $RESOURCE_GROUP"
 echo "Location: $LOCATION"
 
-export VM_SKU="Standard_D2as_v5"
+export VM_SKU="Standard_D2s_v5"
 
 AKS_NAME="aks-66264824"
 echo "AKS Cluster Name: $AKS_NAME"
@@ -30,6 +30,11 @@ az aks get-credentials --name $AKS_NAME --resource-group $RESOURCE_GROUP
 
 cp /mnt/c/Users/LabUser/.kube/config /home/labuser/.kube
 
+===============
+#To install AGC:
+===============
+
+
 SUBSCRIPTION_ID='<your subscription id>'
 az login
 az account set --subscription $SUBSCRIPTION_ID
@@ -40,8 +45,8 @@ az provider register --namespace Microsoft.NetworkFunction
 az provider register --namespace Microsoft.ServiceNetworking
 
 # Install the CLI extensions used by the add-on
-az extension add --name aks-preview --upgrade
-az extension add --name alb         --upgrade
+# az extension add --name aks-preview --upgrade  (it's breaking the regular az aks cli coammnds on the current version 2.81.0)
+# az extension add --name alb         --upgrade
 # Register the preview features for the Gateway API + ALB add-ons
 az feature register --namespace Microsoft.ContainerService --name ManagedGatewayAPIPreview
 az feature register --namespace Microsoft.ContainerService --name ApplicationLoadBalancerPreview
@@ -51,16 +56,7 @@ az feature show --namespace Microsoft.ContainerService --name ManagedGatewayAPIP
 az feature show --namespace Microsoft.ContainerService --name ApplicationLoadBalancerPreview  --query properties.state
 az provider register --namespace Microsoft.ContainerService
 
-
-
-az aks update \
-  --resource-group $RESOURCE_GROUP \
-  --name $AKS_NAME \
-  --enable-oidc-issuer \
-  --enable-workload-identity \
-  --enable-gateway-api \
-  --enable-application-load-balancer
-			
+	
 			
 az group create --name $RESOURCE_GROUP --location $Location
 
@@ -68,10 +64,12 @@ az aks create \
   --resource-group $RESOURCE_GROUP \
   --name $AKS_NAME \
   --location $LOCATION \
-  --node-vm-size $VM_SIZE \
+  --node-vm-size $VM_SKU \
   --network-plugin azure \
   --enable-oidc-issuer \
   --enable-workload-identity \
-  --enable-gateway-api \
-  --enable-application-load-balancer \
   --generate-ssh-key
+
+az extension add --name alb --upgrade
+
+
